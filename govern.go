@@ -2,97 +2,32 @@ package main
 
 import (
 	"flag"
-	"log"
 	"net/url"
 	"os"
 	"os/signal"
 	"time"
 
+	"govern/twitch/twitchmessages"
+
 	"github.com/gorilla/websocket"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
-
-type Message_Metadata struct {
-	MessageID        string    `json:"message_id"`
-	MessageType      string    `json:"message_type"`
-	MessageTimestamp time.Time `json:"message_timestamp"`
-}
-
-type Message_Session struct {
-	ID                      string    `json:"id"`
-	Status                  string    `json:"status"`
-	ConnectedAt             time.Time `json:"connected_at"`
-	KeepaliveTimeoutSeconds int       `json:"keepalive_timeout_seconds"`
-	ReconnectURL            string    `json:"reconnect_url"`
-}
-
-type Message_Payload struct {
-	Session Message_Session
-}
-
-type Base_Message struct {
-	Metadata Message_Metadata
-	Payload  Message_Payload
-}
-
-type Persistant_Session_Information struct {
-	TimeOut      int
-	ReconnectURL string
-}
-
-// https://dev.twitch.tv/docs/eventsub/handling-websocket-events/
-func message_type_handler(message Base_Message) {
-	switch message.Metadata.MessageType {
-	case "session_welcome":
-		session_welcome(message)
-	case "session_keepalive":
-	case "notification":
-	case "session_reconnect":
-	case "revocation":
-
-	}
-}
-
-// The welcome message gives two important things:
-// 1. The URL at which we can reconnect if we are disconnected from the client.
-// 2. The KeepAliveTimeout that will let us know how long we should be waiting before we get a session_keepalive
-func session_welcome(message Base_Message) Persistant_Session_Information {
-	current_session := Persistant_Session_Information{}
-	current_session.ReconnectURL = message.Payload.Session.ReconnectURL
-	current_session.TimeOut = message.Payload.Session.KeepaliveTimeoutSeconds
-	return current_session
-}
-
-func session_keepalive(message Base_Message) {
-
-}
-
-func notification(message Base_Message) {
-
-}
-
-func session_reconnect(message Base_Message) {
-
-}
-
-func revocation(message Base_Message) {
-
-}
 
 var addr = flag.String("addr", "localhost:8080", "twitch-cli ws service address")
 
-func connection() {
+func startTwitchConnection() {
 	flag.Parse()
-	log.SetFlags(0)
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
 	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
-	log.Printf("connecting to %s", u.String())
+	log.Info().Msgf("Main:Connection:Connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		log.Fatal("dial:", err)
+		log.Fatal().Msgf("Main:Connection:Dial:%v", err)
 	}
 	defer c.Close()
 
@@ -103,15 +38,17 @@ func connection() {
 		for {
 			_, message, err := c.ReadMessage()
 			if err != nil {
-
-				log.Println("read:", err)
+				log.Error().Msgf("Main:ReadMessage:Raw:%v", err)
 				return
 			}
-			log.Printf("recv: %s", message)
-			// parse message json for the message_type then cast it to one of the structs
-
-			// send message to different handler funcs
-
+			// May need to add concurrency to the below message parsing/handler in the future.
+			converted_message, err := twitchmessages.ConvertToJson(message)
+			if err != nil {
+				log.Error().Msgf("Main:ConvertToJson:%v", err)
+				return
+			}
+			log.Info().Msgf("Main:ConvertToJson:Converted:%v", converted_message)
+			twitchmessages.MessageTypeHandler(converted_message)
 		}
 	}()
 
@@ -120,13 +57,13 @@ func connection() {
 		case <-done:
 			return
 		case <-interrupt:
-			log.Println("interrupt")
+			log.Info().Msg("Main:Connection:Interrupt occured, closing connection.")
 
 			// Cleanly close the connection by sending a close message and then
 			// waiting (with timeout) for the server to close the connection.
 			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			if err != nil {
-				log.Println("write close:", err)
+				log.Error().Msgf("write close:%v", err)
 				return
 			}
 			select {
@@ -138,15 +75,14 @@ func connection() {
 	}
 }
 
-<<<<<<< HEAD
-func Hello(name string) string {
-	return "Hello, " + name
-}
-
 func main() {
-	fmt.Println(Hello("Chris"))
-=======
-func main() {
-	connection()
->>>>>>> 0ad6af4 (feat: initial commit for message parser)
+	zerolog.SetGlobalLevel(zerolog.TraceLevel)
+	// log.Trace().Msg("this is a debug message")
+	// log.Debug().Msg("this is a debug message")
+	// log.Info().Msg("this is an info message")
+	// log.Warn().Msg("this is a warning message")
+	// log.Error().Msg("this is an error message")
+	// log.Fatal().Msg("this is a fatal message")
+	// log.Panic().Msg("This is a panic message")
+	startTwitchConnection()
 }

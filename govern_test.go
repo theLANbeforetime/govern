@@ -1,16 +1,5 @@
 package main
 
-<<<<<<< HEAD
-import "testing"
-
-func TestHello(t *testing.T) {
-	got := Hello("Chris")
-	want := "Hello, Chris"
-
-	if got != want {
-		t.Errorf("got %q want %q", got, want)
-	}
-=======
 import (
 	"testing"
 	"time"
@@ -88,5 +77,4 @@ func TestMessageTypeHandler(t *testing.T) {
 		}
 	})
 
->>>>>>> 0ad6af4 (feat: initial commit for message parser)
 }
