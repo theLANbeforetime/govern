@@ -16,7 +16,7 @@ import (
 
 var addr = flag.String("addr", "localhost:8080", "twitch-cli ws service address")
 
-func startTwitchConnection() {
+func startTwitchConnection() bool {
 	flag.Parse()
 
 	interrupt := make(chan os.Signal, 1)
@@ -32,20 +32,25 @@ func startTwitchConnection() {
 	defer c.Close()
 
 	done := make(chan struct{})
+	timeout := 15 * time.Second //Likely need to adjust this based on session_start field.
+	// Create a channel to receive data
+	timerCh := make(chan bool)
 
 	go func() {
 		defer close(done)
 		for {
 			_, message, err := c.ReadMessage()
+			timerCh <- true
 			if err != nil {
-				log.Error().Msgf("Main:ReadMessage:Raw:%v", err)
+				log.Error().Msgf("Main:ReadMessage:Error:%v", err)
 				return
 			}
+			log.Trace().Msgf("Main:ReadMessage:RawMessage:%v", message)
 			// May need to add concurrency to the below message parsing/handler in the future.
 			converted_message, err := twitchmessages.ConvertToJson(message)
 			if err != nil {
+				// If we fail to parse message correctly we just log an error but processing continues.
 				log.Error().Msgf("Main:ConvertToJson:%v", err)
-				return
 			}
 			log.Info().Msgf("Main:ConvertToJson:Converted:%v", converted_message)
 			twitchmessages.MessageTypeHandler(converted_message)
@@ -54,8 +59,13 @@ func startTwitchConnection() {
 
 	for {
 		select {
+		case <-timerCh:
+			log.Info().Msgf("Main:Connection:Timeout: Message recevied within set time-out: %v", timeout)
+		case <-time.After(timeout):
+			log.Info().Msgf("Main:Connection:Timeout: No messaged received within set time-out: %v", timeout)
+			return true
 		case <-done:
-			return
+			return false
 		case <-interrupt:
 			log.Info().Msg("Main:Connection:Interrupt occured, closing connection.")
 
@@ -64,19 +74,19 @@ func startTwitchConnection() {
 			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			if err != nil {
 				log.Error().Msgf("write close:%v", err)
-				return
+				return false
 			}
 			select {
 			case <-done:
 			case <-time.After(time.Second):
 			}
-			return
+			return false
 		}
 	}
 }
 
 func main() {
-	zerolog.SetGlobalLevel(zerolog.TraceLevel)
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	// log.Trace().Msg("this is a debug message")
 	// log.Debug().Msg("this is a debug message")
 	// log.Info().Msg("this is an info message")
@@ -84,5 +94,8 @@ func main() {
 	// log.Error().Msg("this is an error message")
 	// log.Fatal().Msg("this is a fatal message")
 	// log.Panic().Msg("This is a panic message")
-	startTwitchConnection()
+	// startTwitchConnection()
+	for shouldRestartTwitchConnection := true; shouldRestartTwitchConnection; {
+		shouldRestartTwitchConnection = startTwitchConnection()
+	}
 }

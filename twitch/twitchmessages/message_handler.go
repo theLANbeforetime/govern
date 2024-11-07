@@ -8,14 +8,13 @@ import (
 )
 
 var CurrentSession PersistantSessionInformation
-var SessionActive bool = true
 
 type MessageMetadata struct {
 	MessageId           string    `json:"message_id"`
 	MessageType         string    `json:"message_type"`
 	MessageTimestamp    time.Time `json:"message_timestamp"`
 	SubscriptionType    string    `json:"subscription_type"`
-	SubscriptionVersion int       `json:"subscription_version"`
+	SubscriptionVersion string    `json:"subscription_version"`
 }
 
 type MessageSession struct {
@@ -30,7 +29,7 @@ type MessageSubscription struct {
 	Id        string `json:"id"`
 	Status    string `json:"status"`
 	Type      string `json:"type"`
-	Version   int    `json:"version"`
+	Version   string `json:"version"`
 	Cost      int    `json:"cost"`
 	Condition struct {
 		BroadcasterUserId string `json:"broadcaster_user_id"`
@@ -46,7 +45,7 @@ type MessageEvent struct {
 	UserId               int       `json:"user_id"`
 	UserLogin            string    `json:"user_login"`
 	UserName             string    `json:"user_name"`
-	BroadcasterUserId    int       `json:"broadcaster_user_id"`
+	BroadcasterUserId    string    `json:"broadcaster_user_id"`
 	BroadcasterUserLogin string    `json:"broadcaster_user_login"`
 	BroadcasterUserName  string    `json:"broadcaster_user_name"`
 	FollowedAt           time.Time `json:"followed_at"`
@@ -66,6 +65,11 @@ type BaseMessage struct {
 type PersistantSessionInformation struct {
 	TimeOut      int
 	ReconnectURL string
+}
+
+type DiscordNotification struct {
+	Type            string
+	BroadcasterName string
 }
 
 func ConvertToJson(message []byte) (BaseMessage, error) {
@@ -96,9 +100,13 @@ func MessageTypeHandler(message BaseMessage) {
 		sessionWelcome(message)
 		log.Info().Msgf("Messages:SessionWelcome: ReconnectUrl: %s, TimeOut: %v", CurrentSession.ReconnectURL, CurrentSession.TimeOut)
 	case "session_keepalive":
-		SessionActive = true
 		log.Info().Msgf("Messages:SessionKeepAlive: Connection good.")
 	case "notification":
+		notification := notification(message)
+		log.Info().Msgf("Messages:Notification: Received notification of type: %s, for broadcaster %s", notification.Type, notification.BroadcasterName)
+		if notification.Type == "stream.online" {
+			log.Info().Msgf("We hit this logic!")
+		}
 	case "session_reconnect":
 	case "revocation":
 
@@ -114,8 +122,12 @@ func sessionWelcome(message BaseMessage) PersistantSessionInformation {
 	return CurrentSession
 }
 
-func notification(message BaseMessage) {
-
+func notification(message BaseMessage) DiscordNotification {
+	notification := DiscordNotification{
+		Type:            message.Payload.Subscription.Type,
+		BroadcasterName: message.Payload.Event.BroadcasterUserName,
+	}
+	return notification
 }
 
 func sessionReconnect(message BaseMessage) {
