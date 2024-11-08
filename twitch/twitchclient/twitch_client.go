@@ -2,6 +2,7 @@ package twitchclient
 
 import (
 	"flag"
+	"govern/broker/messagebroker"
 	"govern/twitch/twitchmessages"
 	"net/url"
 	"os"
@@ -14,7 +15,7 @@ import (
 
 var addr = flag.String("addr", "localhost:8080", "twitch-cli ws service address")
 
-func StartTwitchConnection() bool {
+func StartTwitchConnection(broker *messagebroker.Broker) bool {
 	flag.Parse()
 
 	interrupt := make(chan os.Signal, 1)
@@ -51,7 +52,7 @@ func StartTwitchConnection() bool {
 				log.Error().Msgf("Main:ConvertToJson:%v", err)
 			}
 			log.Info().Msgf("Main:ConvertToJson:Converted:%v", converted_message)
-			twitchmessages.MessageTypeHandler(converted_message)
+			twitchmessages.MessageTypeHandler(converted_message, broker)
 		}
 	}()
 

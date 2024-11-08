@@ -9,6 +9,8 @@ import (
 // twitch event websocket start-server
 // Websocket server should start on: ws://127.0.0.1:8080/ws
 
+//twitch event trigger stream.online --transport=websocket
+
 func TestMessageStruct(t *testing.T) {
 	t.Run("checking welcome message", func(t *testing.T) {
 		welcome := BaseMessage{

@@ -2,6 +2,7 @@ package twitchmessages
 
 import (
 	"encoding/json"
+	"govern/broker/messagebroker"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -94,7 +95,7 @@ func ConvertToJson(message []byte) (BaseMessage, error) {
 }
 
 // https://dev.twitch.tv/docs/eventsub/handling-websocket-events/
-func MessageTypeHandler(message BaseMessage) {
+func MessageTypeHandler(message BaseMessage, broker *messagebroker.Broker) {
 	switch message.Metadata.MessageType {
 	case "session_welcome":
 		sessionWelcome(message)
@@ -105,7 +106,7 @@ func MessageTypeHandler(message BaseMessage) {
 		notification := notification(message)
 		log.Info().Msgf("Messages:Notification: Received notification of type: %s, for broadcaster %s", notification.Type, notification.BroadcasterName)
 		if notification.Type == "stream.online" {
-			log.Info().Msgf("We hit this logic!")
+			broker.Publish("live_notifications", "Veronyx has went live!")
 		}
 	case "session_reconnect":
 	case "revocation":
