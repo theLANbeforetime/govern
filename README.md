@@ -1,3 +1,6 @@
+### Running Govern
+
+Pass the connection address as a flag (-addr) when starting the program. i.e. `go run govern.go -addr=<websocket address>`
 ### Twitch CLI Testing
 
 #### Prerequisite(s)

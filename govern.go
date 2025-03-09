@@ -1,45 +1,48 @@
 package main
 
 import (
-	"govern/broker/messagebroker"
-	"govern/twitch/twitchclient"
+	"flag"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+
+	"govern/controller"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
+// Default addr to testing if flag is not passed in via CLI.
+var addr = flag.String("addr", "ws://localhost:8080/ws", "twitch-cli ws service address")
+
 func main() {
+	flag.Parse()
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	broker := messagebroker.NewBroker()
+	var wg sync.WaitGroup
 
-	// log.Trace().Msg("this is a debug message")
-	// log.Debug().Msg("this is a debug message")
-	// log.Info().Msg("this is an info message")
-	// log.Warn().Msg("this is a warning message")
-	// log.Error().Msg("this is an error message")
-	// log.Fatal().Msg("this is a fatal message")
-	// log.Panic().Msg("This is a panic message")
-	// startTwitchConnection()
+	// Channel to listen for system signals (e.g., Ctrl+C)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	//Entire program hinges on connection to twitch.
-	//If connection to twitch goes down rest of program should go down.
-	for shouldRestartTwitchConnection := true; shouldRestartTwitchConnection; {
-		discord_subscriber := broker.Subscribe("live_notifications")
-		go func() {
-			for {
-				select {
-				case msg, ok := <-discord_subscriber.Channel:
-					if !ok {
-						log.Info().Msg("Subscriber channel closed.")
-						return
-					}
-					log.Info().Msgf("Received: %v\n", msg)
-				case <-discord_subscriber.Unsubscribe:
-					log.Info().Msg("Unsubscribed.")
-					return
-				}
-			}
-		}()
-		shouldRestartTwitchConnection = twitchclient.StartTwitchConnection(broker)
+	wg.Add(1)
+
+	go func() {
+		controller.StartController(*addr)
+	}()
+
+	wg.Done()
+
+	// Wait for an interrupt signal to initiate graceful shutdown
+	select {
+	case <-sigChan:
+		// Handle shutdown signal (Ctrl+C or SIGTERM)
+		log.Info().Msgf("Received shutdown signal. Shutting down gracefully...")
 	}
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+
+	// Final cleanup before exiting
+	log.Info().Msgf("Application shutdown complete.")
 }

@@ -2,7 +2,6 @@ package twitchmessages
 
 import (
 	"encoding/json"
-	"govern/broker/messagebroker"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -95,7 +94,7 @@ func ConvertToJson(message []byte) (BaseMessage, error) {
 }
 
 // https://dev.twitch.tv/docs/eventsub/handling-websocket-events/
-func MessageTypeHandler(message BaseMessage, broker *messagebroker.Broker) {
+func MessageTypeHandler(message BaseMessage, reconnectChan chan string) {
 	switch message.Metadata.MessageType {
 	case "session_welcome":
 		sessionWelcome(message)
@@ -105,18 +104,17 @@ func MessageTypeHandler(message BaseMessage, broker *messagebroker.Broker) {
 	case "notification":
 		notification := notification(message)
 		log.Info().Msgf("Messages:Notification: Received notification of type: %s, for broadcaster %s", notification.Type, notification.BroadcasterName)
-		if notification.Type == "stream.online" {
-			broker.Publish("live_notifications", "Veronyx has went live!")
-		}
 	case "session_reconnect":
+		reconnect := sessionReconnect(message)
+		if reconnect != "" {
+			log.Info().Msgf("Recevied reconnect message for address: %v", reconnect)
+		}
+		reconnectChan <- reconnect
 	case "revocation":
 
 	}
 }
 
-// The welcome message gives two important things:
-// 1. The URL at which we can reconnect if we are disconnected from the client.
-// 2. The KeepAliveTimeout that will let us know how long we should be waiting before we get a session_keepalive
 func sessionWelcome(message BaseMessage) PersistantSessionInformation {
 	CurrentSession.ReconnectURL = message.Payload.Session.ReconnectURL
 	CurrentSession.TimeOut = message.Payload.Session.KeepaliveTimeoutSeconds
@@ -131,8 +129,13 @@ func notification(message BaseMessage) DiscordNotification {
 	return notification
 }
 
-func sessionReconnect(message BaseMessage) {
-
+func sessionReconnect(message BaseMessage) string {
+	reconnect_address := message.Payload.Session.ReconnectURL
+	if reconnect_address != "" {
+		log.Info().Msgf("Received reconnect message, attempting to reconnect to: %s", reconnect_address)
+		return reconnect_address
+	}
+	return ""
 }
 
 func revocation(message BaseMessage) {
